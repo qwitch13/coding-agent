@@ -1,0 +1,24 @@
+# Core dependencies
+rich>=13.0.0
+aiohttp>=3.9.0
+requests>=2.31.0
+
+# AI Provider SDKs (optional - agent works without these)
+anthropic>=0.18.0
+openai>=1.12.0
+google-generativeai>=0.4.0
+
+# Local AI backends (optional - for M3/M4 Apple Silicon)
+# mlx>=0.4.0              # Uncomment for Apple Silicon MLX support
+# mlx-lm>=0.4.0           # Uncomment for MLX language models
+# llama-cpp-python>=0.2.0 # Uncomment for llama.cpp support
+
+# Code analysis
+ruff>=0.2.0
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
+# Git integration (gh CLI required separately)
+# Install gh: brew install gh (macOS) or see https://cli.github.com/
