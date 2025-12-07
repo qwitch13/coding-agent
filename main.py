@@ -26,6 +26,7 @@ from orchestrator import AgentOrchestrator, run_multi_agent
 from journal import get_journal, new_session
 from git_integration import GitManager, GitHubManager, GitHubAccountManager, create_and_push_repos
 from terminal_ui import TerminalUI, ResultsDisplay, InteractiveMode, AgentProgressDisplay
+from code_search import CodeSearchManager, search_similar_code
 
 
 VERSION = "1.0.0"
@@ -93,6 +94,9 @@ class CodingAgentCLI:
 
         elif cmd == "config":
             self._show_config(target)
+
+        elif cmd == "search":
+            await self._search_code(target)
 
     async def _run_agent(self, target: str, mode: str = "fix"):
         """Run the agent on a target."""
@@ -301,6 +305,63 @@ class CodingAgentCLI:
         else:
             self.ui.print_error("Commit failed", result)
 
+    async def _search_code(self, query: str):
+        """Search for similar code across web sources."""
+        if not query:
+            self.ui.print_error("Error", "No search query specified")
+            return
+
+        self.ui.console.print(f"\n[bold]Searching for:[/bold] {query}\n")
+
+        from rich.table import Table
+        from rich.panel import Panel
+
+        results = await search_similar_code(query)
+
+        if not results:
+            self.ui.print_warning("No results found")
+            return
+
+        # Group results by source
+        by_source = {}
+        for r in results:
+            if r.source not in by_source:
+                by_source[r.source] = []
+            by_source[r.source].append(r)
+
+        for source, source_results in by_source.items():
+            self.ui.console.print(f"\n[bold cyan]{source.upper()}[/bold cyan]")
+
+            table = Table(show_header=True, header_style="bold")
+            table.add_column("#", width=3)
+            table.add_column("Title", width=50)
+            table.add_column("Language", width=10)
+            table.add_column("Relevance", width=10)
+
+            for i, r in enumerate(source_results[:5], 1):
+                table.add_row(
+                    str(i),
+                    r.title[:47] + "..." if len(r.title) > 50 else r.title,
+                    r.language or "-",
+                    f"{r.relevance:.0%}" if r.relevance else "-"
+                )
+
+            self.ui.console.print(table)
+
+            # Show URLs
+            for i, r in enumerate(source_results[:5], 1):
+                self.ui.console.print(f"  [{i}] [dim]{r.url}[/dim]")
+
+        self.ui.console.print(f"\n[green]Found {len(results)} total results[/green]")
+
+        # Record in journal
+        if self.journal:
+            self.journal.record_ai_call(
+                "code_search",
+                {"query": query, "results_count": len(results)},
+                {"sources": list(by_source.keys())}
+            )
+
     def _show_config(self, key: Optional[str] = None):
         """Show or modify configuration."""
         self.ui.console.print("\n[bold]Configuration[/bold]\n")
@@ -359,6 +420,9 @@ class CodingAgentCLI:
             elif args.command == "create-repos":
                 await self._create_github_repos(args)
 
+            elif args.command == "search":
+                await self._search_code(args.query)
+
         finally:
             if self.journal:
                 summary = self.journal.close_session()
@@ -399,6 +463,7 @@ Examples:
   python main.py test                 # Run tests
   python main.py push                 # Commit and push changes
   python main.py create-repos         # Create GitHub repos on nebulai13 and qwitch13
+  python main.py search "async await" # Search for similar code patterns
 
 Environment Variables:
   ANTHROPIC_API_KEY    - Claude API key
@@ -462,6 +527,13 @@ Modes:
     repos_parser.add_argument("--name", "-n", default="coding-agent", help="Repository name")
     repos_parser.add_argument("--description", "-d", help="Repository description")
     repos_parser.add_argument("--private", "-p", action="store_true", help="Create private repos")
+
+    # Search command
+    search_parser = subparsers.add_parser("search", help="Search for similar code on the web")
+    search_parser.add_argument("query", help="Search query or code snippet")
+    search_parser.add_argument("--language", "-l", help="Filter by programming language")
+    search_parser.add_argument("--source", "-s", choices=["github", "stackoverflow", "google", "all"],
+                               default="all", help="Search source")
 
     args = parser.parse_args()
 
