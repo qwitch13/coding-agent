@@ -26,7 +26,8 @@ from orchestrator import AgentOrchestrator, run_multi_agent
 from journal import get_journal, new_session
 from git_integration import GitManager, GitHubManager, GitHubAccountManager, create_and_push_repos
 from terminal_ui import TerminalUI, ResultsDisplay, InteractiveMode, AgentProgressDisplay
-from code_search import CodeSearchManager, search_similar_code
+from code_search import CodeSearchManager, search_code
+from local_code_search import get_local_search_manager, local_search
 
 
 VERSION = "1.0.0"
@@ -97,6 +98,18 @@ class CodingAgentCLI:
 
         elif cmd == "search":
             await self._search_code(target)
+
+        elif cmd == "local-search":
+            await self._local_search(target)
+
+        elif cmd == "local-add":
+            self._local_add_directory(target)
+
+        elif cmd == "local-list":
+            self._local_list_directories()
+
+        elif cmd == "local-remove":
+            self._local_remove_directory(target)
 
     async def _run_agent(self, target: str, mode: str = "fix"):
         """Run the agent on a target."""
@@ -316,7 +329,7 @@ class CodingAgentCLI:
         from rich.table import Table
         from rich.panel import Panel
 
-        results = await search_similar_code(query)
+        results = await search_code(query)
 
         if not results:
             self.ui.print_warning("No results found")
@@ -354,13 +367,41 @@ class CodingAgentCLI:
 
         self.ui.console.print(f"\n[green]Found {len(results)} total results[/green]")
 
-        # Record in journal
-        if self.journal:
-            self.journal.record_ai_call(
-                "code_search",
-                {"query": query, "results_count": len(results)},
-                {"sources": list(by_source.keys())}
-            )
+    async def _local_search(self, query: str, extract: bool = False):
+        """Search for code in configured local directories."""
+        if not query:
+            self.ui.print_error("Error", "No search query specified")
+            return
+
+        manager = get_local_search_manager()
+        results = manager.search_and_display(query)
+
+        if results and extract:
+            if self.ui.confirm(f"Extract {len(results)} files to current project?"):
+                manager.extract_results(results)
+
+    def _local_add_directory(self, path: str):
+        """Add a directory to local search configuration."""
+        if not path:
+            self.ui.print_error("Error", "No path specified")
+            return
+
+        manager = get_local_search_manager()
+        manager.add_directory(path)
+
+    def _local_list_directories(self):
+        """List configured local search directories."""
+        manager = get_local_search_manager()
+        manager.list_directories()
+
+    def _local_remove_directory(self, path_or_name: str):
+        """Remove a directory from local search configuration."""
+        if not path_or_name:
+            self.ui.print_error("Error", "No path or name specified")
+            return
+
+        manager = get_local_search_manager()
+        manager.remove_directory(path_or_name)
 
     def _show_config(self, key: Optional[str] = None):
         """Show or modify configuration."""
@@ -423,6 +464,18 @@ class CodingAgentCLI:
             elif args.command == "search":
                 await self._search_code(args.query)
 
+            elif args.command == "local-search":
+                await self._local_search(args.query, extract=args.extract if hasattr(args, 'extract') else False)
+
+            elif args.command == "local-add":
+                self._local_add_directory(args.path)
+
+            elif args.command == "local-list":
+                self._local_list_directories()
+
+            elif args.command == "local-remove":
+                self._local_remove_directory(args.path)
+
         finally:
             if self.journal:
                 summary = self.journal.close_session()
@@ -462,8 +515,11 @@ Examples:
   python main.py optimize utils.py    # Optimize utils.py
   python main.py test                 # Run tests
   python main.py push                 # Commit and push changes
-  python main.py create-repos         # Create GitHub repos on nebulai13 and qwitch13
-  python main.py search "async await" # Search for similar code patterns
+  python main.py create-repos         # Create GitHub repos
+  python main.py search "async await" # Search for similar code on web
+  python main.py local-add ~/projects # Add local search directory
+  python main.py local-search "class" # Search in local directories
+  python main.py local-list           # List configured directories
 
 Environment Variables:
   ANTHROPIC_API_KEY    - Claude API key
@@ -534,6 +590,22 @@ Modes:
     search_parser.add_argument("--language", "-l", help="Filter by programming language")
     search_parser.add_argument("--source", "-s", choices=["github", "stackoverflow", "google", "all"],
                                default="all", help="Search source")
+
+    # Local search commands
+    local_search_parser = subparsers.add_parser("local-search", help="Search for code in local directories")
+    local_search_parser.add_argument("query", help="Search query or pattern")
+    local_search_parser.add_argument("--language", "-l", help="Filter by programming language")
+    local_search_parser.add_argument("--regex", "-r", action="store_true", help="Use regex pattern")
+    local_search_parser.add_argument("--extract", "-e", action="store_true", help="Extract matches to current folder")
+
+    local_add_parser = subparsers.add_parser("local-add", help="Add directory to local search")
+    local_add_parser.add_argument("path", help="Directory path to add")
+    local_add_parser.add_argument("--name", "-n", help="Friendly name for the directory")
+
+    subparsers.add_parser("local-list", help="List configured local search directories")
+
+    local_remove_parser = subparsers.add_parser("local-remove", help="Remove directory from local search")
+    local_remove_parser.add_argument("path", help="Directory path or name to remove")
 
     args = parser.parse_args()
 

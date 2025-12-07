@@ -19,14 +19,15 @@ An intelligent coding agent that iteratively analyzes, fixes, tests, optimizes, 
 9. [Local AI Setup](#local-ai-setup)
 10. [Multi-Agent Orchestration](#multi-agent-orchestration)
 11. [Code Search](#code-search)
-12. [User Interaction](#user-interaction)
-13. [Journaling System](#journaling-system)
-14. [Git Integration](#git-integration)
-15. [API Reference](#api-reference)
-16. [Architecture](#architecture)
-17. [Troubleshooting](#troubleshooting)
-18. [Contributing](#contributing)
-19. [License](#license)
+12. [Local Code Search](#local-code-search)
+13. [User Interaction](#user-interaction)
+14. [Journaling System](#journaling-system)
+15. [Git Integration](#git-integration)
+16. [API Reference](#api-reference)
+17. [Architecture](#architecture)
+18. [Troubleshooting](#troubleshooting)
+19. [Contributing](#contributing)
+20. [License](#license)
 
 ---
 
@@ -648,6 +649,111 @@ similar = await search.find_similar_code(my_code_snippet)
 
 ---
 
+## Local Code Search
+
+Search your own local directories for code patterns and extract matches to your current project.
+
+### Configure Search Directories
+
+Add directories that the agent should search when looking for code:
+
+```bash
+# Add a directory
+python main.py local-add ~/projects
+python main.py local-add /path/to/libraries --name "My Libraries"
+
+# List configured directories
+python main.py local-list
+
+# Remove a directory
+python main.py local-remove ~/projects
+```
+
+### Search Local Directories
+
+```bash
+# Basic search
+python main.py local-search "class MyClass"
+
+# Search with regex
+python main.py local-search "def \w+_handler" --regex
+
+# Filter by language
+python main.py local-search "async function" --language javascript
+
+# Search and extract matches
+python main.py local-search "authentication" --extract
+```
+
+### Programmatic Usage
+
+```python
+from local_code_search import LocalSearchManager, get_local_search_manager
+
+manager = get_local_search_manager()
+
+# Add search directories
+manager.add_directory("~/projects")
+manager.add_directory("/path/to/libs", name="Libraries")
+
+# Search
+results = manager.search("def calculate")
+
+# Display results
+results = manager.search_and_display("class Handler", show_context=True)
+
+# Extract matches to current folder
+summary = manager.extract_results(results)
+print(f"Extracted {summary['success']} files to ./extracted/")
+```
+
+### Search Features
+
+| Feature | Description |
+|---------|-------------|
+| **Pattern Matching** | Search by string or regex |
+| **Language Filtering** | Filter by programming language |
+| **Context Display** | Show lines around matches |
+| **Relevance Scoring** | Results ranked by relevance |
+| **File Extraction** | Copy matches to current project |
+| **Directory Config** | Save directories for future sessions |
+
+### Configuration File
+
+Local search configuration is saved in `.local_search_config.json`:
+
+```json
+{
+  "directories": [
+    {
+      "path": "/Users/me/projects",
+      "name": "My Projects",
+      "enabled": true,
+      "languages": [],
+      "added_at": "2024-01-15T10:30:00"
+    }
+  ],
+  "default_languages": [],
+  "max_file_size": 1048576,
+  "max_results": 100
+}
+```
+
+### Supported Languages
+
+Python, JavaScript, TypeScript, Java, Kotlin, Go, Rust, C, C++, Ruby, PHP, Swift, Shell, SQL, HTML, CSS, YAML, JSON, Markdown
+
+### Ignored Directories
+
+The following are automatically ignored:
+- `.git`, `.svn`, `.hg`
+- `node_modules`, `__pycache__`
+- `venv`, `.venv`, `.env`
+- `build`, `dist`, `target`, `out`
+- `.idea`, `.vscode`
+
+---
+
 ## User Interaction
 
 The agent asks for user input when needed.
@@ -904,7 +1010,7 @@ status = local_ai_manager.get_status()
 
 ### CodeSearchManager
 
-Code search functionality.
+Web code search functionality.
 
 ```python
 from code_search import CodeSearchManager
@@ -919,6 +1025,30 @@ results = await search.search_stackoverflow(query)
 
 # Find similar code
 similar = await search.find_similar_code(code_snippet)
+```
+
+### LocalSearchManager
+
+Local directory code search.
+
+```python
+from local_code_search import get_local_search_manager
+
+manager = get_local_search_manager()
+
+# Configure directories
+manager.add_directory("~/projects")
+manager.list_directories()
+
+# Search local files
+results = manager.search("class Handler")
+
+# Search with display
+results = manager.search_and_display("async def", show_context=True)
+
+# Extract to current folder
+summary = manager.extract_results(results)
+# Files extracted to ./extracted/
 ```
 
 ### UserInteractionManager
@@ -994,6 +1124,12 @@ coding-agent/
 │   ├── GitHubSearch     # GitHub search
 │   ├── StackOverflowSearch # SO search
 │   └── WebSearch        # General web search
+│
+├── local_code_search.py # Local directory search
+│   ├── LocalSearchManager # Search management
+│   ├── LocalCodeSearcher  # File searching
+│   ├── LocalSearchConfig  # Directory config
+│   └── SearchDirectory    # Directory settings
 │
 ├── journal.py           # Activity logging
 │   └── AgentJournal     # Journal management
